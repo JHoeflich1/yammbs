@@ -7,6 +7,8 @@ from typing import Literal
 
 import click
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot
 from openff.toolkit import Molecule
 from rdkit.Chem import AllChem, Draw
@@ -23,13 +25,7 @@ pyplot.style.use("ggplot")
     "--base-force-fields",
     "-bf",
     multiple=True,
-    default=[
-        "openff-1.0.0",
-        "openff-2.0.0",
-        "openff-2.1.0",
-        "openff-2.2.0",
-        "openff-2.2.1",
-    ],
+    default=[],
     help="List of force fields to use for optimization.",
 )
 @click.option(
@@ -94,7 +90,7 @@ def main(
 ) -> None:
     """Run torsion drive comparisons using specified force fields and input data."""
     force_fields = base_force_fields + extra_force_fields
-
+    
     with open(qcarchive_torsion_data) as f:
         dataset = QCArchiveTorsionDataset.model_validate_json(f.read())
 
@@ -231,7 +227,7 @@ def plot_torsions(plot_dir: str, force_fields: list[str], store: TorsionStore) -
                 angles,
                 [val - mm[qm_minimum_index] for val in mm.values()],
                 "o--",
-                label=force_field,
+                label=_display_force_field_name(force_field),
             )
 
         # Only add the axis if this is the last in the row - and add it off to the right
@@ -315,7 +311,7 @@ def plot_cdfs(force_fields: list[str], metrics_file: str, plot_dir: str):
                     sorted_data,
                     np.arange(1, len(sorted_data) + 1) / len(sorted_data),
                     "-",
-                    label=force_field,
+                    label=_display_force_field_name(force_field),
                 )
 
                 x_label = (
@@ -337,6 +333,10 @@ def plot_cdfs(force_fields: list[str], metrics_file: str, plot_dir: str):
 def get_rms(array: np.ndarray) -> float:
     """Calculate the root mean square of an array."""
     return np.sqrt(np.mean(array**2))
+
+def _display_force_field_name(force_field: str) -> str:
+    """Return a concise plot label for a force field, stripping any path."""
+    return pathlib.Path(force_field).stem
 
 
 def plot_rms_stats(
@@ -367,7 +367,11 @@ def plot_rms_stats(
         figure, axis = pyplot.subplots()
 
         # Use different colors for each bar - the same as for the CDFs
-        axis.bar(data.keys(), data.values(), color=pyplot.cm.tab10.colors)
+        axis.bar(
+            [_display_force_field_name(ff) for ff in data.keys()],
+            data.values(),
+            color=pyplot.cm.tab10.colors,
+        )        
         axis.set_ylabel(key.upper() + " / " + units[key])
 
         # Set x-ticks to be vertical
@@ -396,7 +400,11 @@ def plot_rms_js_distance(
     # Plot mean JS distance
     figure, axis = pyplot.subplots()
 
-    axis.bar(rms_js_distance.keys(), rms_js_distance.values(), color=pyplot.cm.tab10.colors)
+    axis.bar(
+        [_display_force_field_name(ff) for ff in rms_js_distance.keys()],
+        rms_js_distance.values(),
+        color=pyplot.cm.tab10.colors,
+    )
     axis.set_ylabel(f"Mean Jensen-Shannon Distance at {js_div_temp} K")
 
     # Set x-ticks to be vertical
@@ -430,7 +438,7 @@ def plot_mean_error_distribution(
     for force_field in mean_errors.keys():
         sns.kdeplot(
             data=mean_errors[force_field],
-            label=force_field,
+            label=_display_force_field_name(force_field),
             ax=axis,
         )
     axis.set_xlabel("Mean Error / " + units["mean_error"])
